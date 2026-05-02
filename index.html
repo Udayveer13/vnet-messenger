@@ -3,93 +3,178 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>VNet Messenger</title>
+  <title>VNet Messenger - Functional P2P</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
-    :root{--bg:#0f1220;--card:#161a2b;--ink:#e7e8ee;--accent:#7cc0ff;--ok:#8ef0b5;}
-    body{margin:0;background:#0c0f1d;color:var(--ink);font-family:sans-serif;display:flex;flex-direction:column;height:100vh}
-    .header{background:var(--card);padding:15px;border-bottom:1px solid #262b44;text-align:center}
-    #chat-box{flex:1;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
-    .msg-bubble{padding:10px 15px;border-radius:15px;max-width:80%;word-wrap:break-word}
-    .sent{align-self:flex-end;background:linear-gradient(135deg,#2c6fff,#8b5cf6);color:#fff}
-    .received{align-self:flex-start;background:#263055}
-    .footer{background:var(--card);padding:15px;display:flex;gap:10px;border-top:1px solid #262b44}
-    input,button{padding:12px;border-radius:12px;border:none;outline:none}
-    input{flex:1;background:#0c1020;color:#fff;border:1px solid #2a2f50}
-    button{background:var(--accent);color:#0f1220;font-weight:700;cursor:pointer}
-    .id-display{font-size:11px;color:var(--ok);margin-top:5px;cursor:pointer}
+    :root{--bg:#0f1220;--card:#161a2b;--ink:#e7e8ee;--accent:#7cc0ff;--ok:#8ef0b5;--sent:#2c6fff;}
+    *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,sans-serif}
+    body{margin:0;background:#0c0f1d;color:var(--ink);height:100vh;display:flex;overflow:hidden}
+
+    /* Sidebar Styles */
+    #sidebar {
+      width: 260px;
+      background: var(--card);
+      border-right: 1px solid #262b44;
+      display: flex;
+      flex-direction: column;
+      transition: 0.3s;
+    }
+    .sidebar-header { padding: 20px; font-weight: 700; border-bottom: 1px solid #262b44; font-size: 18px; }
+    #contact-list { flex: 1; overflow-y: auto; }
+    .contact-item { 
+      padding: 15px 20px; 
+      border-bottom: 1px solid #2a2f50; 
+      cursor: pointer; 
+      transition: 0.2s;
+    }
+    .contact-item:hover { background: #1d263f; }
+    .contact-item .name { display: block; font-weight: 600; color: var(--accent); }
+    .contact-item .peer-id { font-size: 10px; color: var(--muted); opacity: 0.6; }
+
+    /* Main Chat Area */
+    #chat-area { flex: 1; display: flex; flex-direction: column; position: relative; }
+    .header { background: var(--card); padding: 15px 20px; border-bottom: 1px solid #262b44; }
+    #my-id-display { font-size: 11px; color: var(--ok); cursor: pointer; margin-top: 4px; display: inline-block; }
+    
+    #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .msg { padding: 10px 16px; border-radius: 14px; max-width: 75%; font-size: 14px; line-height: 1.4; }
+    .sent { align-self: flex-end; background: var(--sent); color: white; border-bottom-right-radius: 2px; }
+    .received { align-self: flex-start; background: #263055; border-bottom-left-radius: 2px; }
+
+    /* Footer / Inputs */
+    .footer { background: var(--card); padding: 15px; border-top: 1px solid #262b44; display: flex; gap: 10px; }
+    input { background: #0c1020; color: white; border: 1px solid #2a2f50; border-radius: 10px; padding: 12px; outline: none; flex: 1; }
+    #target-id { width: 120px; flex: none; }
+    button { background: var(--accent); color: #0f1220; border: none; border-radius: 10px; padding: 0 20px; font-weight: 700; cursor: pointer; }
+    
+    @media (max-width: 600px) { #sidebar { display: none; } } /* Mobile simple view */
   </style>
 </head>
 <body>
 
-<div class="header">
-  <strong>VNet Messenger</strong>
-  <div id="my-id" class="id-display">Initializing My ID...</div>
-</div>
+  <div id="sidebar">
+    <div class="sidebar-header">Contacts</div>
+    <div id="contact-list">
+      <!-- Saved friends will appear here -->
+    </div>
+    <button onclick="addManualContact()" style="margin: 10px; padding: 10px; background: #1d263f; color: white;">+ Add ID</button>
+  </div>
 
-<div id="chat-box">
-  <!-- Messages appear here -->
-</div>
+  <div id="chat-area">
+    <div class="header">
+      <strong>VNet Messenger</strong><br>
+      <span id="my-id-display" title="Click to copy your ID">Initializing Address...</span>
+    </div>
 
-<div class="footer">
-  <input id="target-id" type="text" style="width: 80px; flex:none" placeholder="Friend ID">
-  <input id="msg-input" type="text" placeholder="Type a message...">
-  <button id="send-btn">Send</button>
-</div>
+    <div id="chat-box"></div>
+
+    <div class="footer">
+      <input id="target-id" type="text" placeholder="Friend ID">
+      <input id="msg-input" type="text" placeholder="Type a message...">
+      <button id="send-btn">Send</button>
+    </div>
+  </div>
 
 <script>
 let peer;
-let myId;
-const chatBox = document.getElementById('chat-box');
+let myPeerId;
+// Load contacts from phone's local storage
+let contacts = JSON.parse(localStorage.getItem('vnet_contacts') || '{}');
 
-// 1. Start the Peer Network
-function init() {
-  peer = new Peer();
-  
+function initApp() {
+  // Try to use a permanent username if one was saved before
+  const savedId = localStorage.getItem('vnet_permanent_id');
+  peer = new Peer(savedId);
+
   peer.on('open', id => {
-    myId = id;
-    document.getElementById('my-id').textContent = "My ID: " + id + " (Tap to copy)";
+    myPeerId = id;
+    localStorage.setItem('vnet_permanent_id', id);
+    document.getElementById('my-id-display').textContent = "My Address: " + id + " (Tap to copy)";
   });
 
-  // 2. Receive Messages
+  // Handle incoming connections automatically
   peer.on('connection', conn => {
     conn.on('data', data => {
-      addMessage(data, 'received');
+      autoSaveContact(conn.peer);
+      displayMessage(contacts[conn.peer] || 'Unknown', data, 'received');
     });
   });
+
+  renderContacts();
 }
 
-// 3. UI Helpers
-function addMessage(text, type) {
+// Automatically add people to list when they message you
+function autoSaveContact(id) {
+  if (!contacts[id]) {
+    const nickname = prompt("New message from " + id + ". Give them a name:", "New Friend");
+    contacts[id] = nickname || id.substring(0, 5);
+    saveToStorage();
+  }
+}
+
+function addManualContact() {
+  const id = prompt("Enter Friend's Peer ID:");
+  if (id) {
+    const name = prompt("Enter name for this friend:");
+    contacts[id] = name || id.substring(0, 5);
+    saveToStorage();
+  }
+}
+
+function saveToStorage() {
+  localStorage.setItem('vnet_contacts', JSON.stringify(contacts));
+  renderContacts();
+}
+
+function renderContacts() {
+  const list = document.getElementById('contact-list');
+  list.innerHTML = "";
+  for (let id in contacts) {
+    const div = document.createElement('div');
+    div.className = 'contact-item';
+    div.innerHTML = `<span class="name">${contacts[id]}</span><span class="peer-id">${id}</span>`;
+    div.onclick = () => { 
+      document.getElementById('target-id').value = id; 
+      updateStatus("Talking to " + contacts[id]);
+    };
+    list.appendChild(div);
+  }
+}
+
+function displayMessage(sender, text, type) {
+  const box = document.getElementById('chat-box');
   const div = document.createElement('div');
-  div.className = `msg-bubble ${type}`;
-  div.textContent = text;
-  chatBox.appendChild(div);
-  chatBox.scrollTop = chatBox.scrollHeight;
+  div.className = `msg ${type}`;
+  div.innerHTML = `<small style="display:block; font-size:10px; opacity:0.6">${sender}</small>${text}`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
 }
 
-// 4. Send Message
 document.getElementById('send-btn').addEventListener('click', () => {
-  const targetId = document.getElementById('target-id').value;
+  const tid = document.getElementById('target-id').value;
   const msg = document.getElementById('msg-input').value;
   
-  if(!targetId || !msg) return;
+  if (!tid || !msg) return;
 
-  const conn = peer.connect(targetId);
+  const conn = peer.connect(tid);
   conn.on('open', () => {
     conn.send(msg);
-    addMessage(msg, 'sent');
+    displayMessage("Me", msg, 'sent');
     document.getElementById('msg-input').value = "";
   });
 });
 
-// Copy ID on click
-document.getElementById('my-id').addEventListener('click', () => {
-  navigator.clipboard.writeText(myId);
-  alert("ID Copied!");
+document.getElementById('my-id-display').addEventListener('click', () => {
+  navigator.clipboard.writeText(myPeerId);
+  alert("Address copied to clipboard!");
 });
 
-init();
+function updateStatus(txt) {
+  console.log(txt);
+}
+
+// Start the app[cite: 1]
+initApp();
 </script>
 </body>
 </html>
