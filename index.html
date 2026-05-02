@@ -3,162 +3,93 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>VNet Mesh Messenger – AES-256 + P2P</title>
+  <title>VNet Messenger</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
-    :root{--bg:#0f1220;--card:#161a2b;--ink:#e7e8ee;--muted:#a7a9b6;--accent:#7cc0ff;--ok:#8ef0b5;--warn:#ffb86c;}
-    *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif}
-    body{margin:0;background:linear-gradient(120deg,#0c0f1d,#12162a 35%,#0c0f1d);color:var(--ink);min-height:100vh;padding:20px}
-    .wrap{max-width:900px;margin:auto}
-    .card{background:var(--card);border:1px solid #262b44;padding:24px;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
-    h1{margin:0 0 10px;font-size:22px;display:flex;align-items:center;justify-content:space-between}
-    label{display:block;margin:15px 0 5px;color:#cbd5e1;font-weight:600;font-size:14px}
-    textarea,input{width:100%;background:#0c1020;color:var(--ink);border:1px solid #2a2f50;border-radius:12px;padding:12px;outline:none;font-size:14px}
-    textarea{min-height:120px}
-    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}
-    button{cursor:pointer;border:none;border-radius:12px;padding:12px 18px;font-weight:700;background:#263055;color:#e6edff;transition:0.2s}
-    button:hover{background:#2e3866}
-    .primary{background:linear-gradient(135deg,#2c6fff,#8b5cf6)}
-    .peer-info{background:#1d263f;padding:10px;border-radius:12px;margin-bottom:20px;border-left:4px solid var(--accent);font-family:monospace}
-    .status{font-size:12px;margin-top:10px;color:var(--muted)}
-    .success{color:var(--ok)}
-    .error{color:#ff7b9c}
-    .mono{font-family:monospace;word-break:break-all}
+    :root{--bg:#0f1220;--card:#161a2b;--ink:#e7e8ee;--accent:#7cc0ff;--ok:#8ef0b5;}
+    body{margin:0;background:#0c0f1d;color:var(--ink);font-family:sans-serif;display:flex;flex-direction:column;height:100vh}
+    .header{background:var(--card);padding:15px;border-bottom:1px solid #262b44;text-align:center}
+    #chat-box{flex:1;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+    .msg-bubble{padding:10px 15px;border-radius:15px;max-width:80%;word-wrap:break-word}
+    .sent{align-self:flex-end;background:linear-gradient(135deg,#2c6fff,#8b5cf6);color:#fff}
+    .received{align-self:flex-start;background:#263055}
+    .footer{background:var(--card);padding:15px;display:flex;gap:10px;border-top:1px solid #262b44}
+    input,button{padding:12px;border-radius:12px;border:none;outline:none}
+    input{flex:1;background:#0c1020;color:#fff;border:1px solid #2a2f50}
+    button{background:var(--accent);color:#0f1220;font-weight:700;cursor:pointer}
+    .id-display{font-size:11px;color:var(--ok);margin-top:5px;cursor:pointer}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h1>VNet Messenger <span style="font-size:12px;opacity:0.6">P2P Encryption</span></h1>
-      
-      <div class="peer-info">
-        My Peer ID: <span id="my-id" class="mono">Initializing...</span>
-      </div>
 
-      <label>Recipient Peer ID (Leave blank to just encrypt locally)</label>
-      <input id="target-id" type="text" placeholder="Paste friend's ID here">
+<div class="header">
+  <strong>VNet Messenger</strong>
+  <div id="my-id" class="id-display">Initializing My ID...</div>
+</div>
 
-      <label>Message</label>
-      <textarea id="msg" placeholder="Type your secret message..."></textarea>
+<div id="chat-box">
+  <!-- Messages appear here -->
+</div>
 
-      <label>Shared Password</label>
-      <input id="pwd" type="password" placeholder="Min 8 characters">
-
-      <div class="btns">
-        <button class="primary" id="send-btn">Encrypt & Send</button>
-        <button id="decrypt-btn">Decrypt Input</button>
-        <button id="clear-btn">Clear All</button>
-      </div>
-
-      <label>Encrypted Output / Received Blob</label>
-      <textarea id="out" class="mono" readonly placeholder="Encrypted data appears here..."></textarea>
-      
-      <div id="status-text" class="status">System Ready.</div>
-    </div>
-  </div>
+<div class="footer">
+  <input id="target-id" type="text" style="width: 80px; flex:none" placeholder="Friend ID">
+  <input id="msg-input" type="text" placeholder="Type a message...">
+  <button id="send-btn">Send</button>
+</div>
 
 <script>
-const enc = new TextEncoder();
-const dec = new TextDecoder();
 let peer;
+let myId;
+const chatBox = document.getElementById('chat-box');
 
-// --- 1. COMPRESSION LOGIC (Solves Payload Bloat) ---
-async function compress(text) {
-  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
-  return await new Response(stream).arrayBuffer();
-}
-
-async function decompress(buffer) {
-  const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return await new Response(stream).text();
-}
-
-// --- 2. ENCRYPTION CORE (AES-256-GCM) ---
-async function deriveKey(password, salt) {
-  const pwKey = await crypto.subtle.importKey('raw', enc.encode(password), {name:'PBKDF2'}, false, ['deriveKey']);
-  return crypto.subtle.deriveKey(
-    {name:'PBKDF2', salt, iterations:250000, hash:'SHA-256'},
-    pwKey, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']
-  );
-}
-
-async function encryptData(text, password) {
-  const compressed = await compress(text);
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(password, salt);
-  const ct = await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, compressed);
-  
-  const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-  return `v2:${b64(salt)}:${b64(iv)}:${b64(ct)}`;
-}
-
-async function decryptData(payload, password) {
-  const [, sB64, iB64, cB64] = payload.split(':');
-  const b64dec = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-  const key = await deriveKey(password, b64dec(sB64));
-  const decrypted = await crypto.subtle.decrypt({name:'AES-GCM', iv: b64dec(iB64)}, key, b64dec(cB64));
-  return await decompress(decrypted);
-}
-
-// --- 3. P2P NETWORKING (The "Messaging" part) ---
-function initNetworking() {
+// 1. Start the Peer Network
+function init() {
   peer = new Peer();
-  peer.on('open', id => { document.getElementById('my-id').textContent = id; });
   
+  peer.on('open', id => {
+    myId = id;
+    document.getElementById('my-id').textContent = "My ID: " + id + " (Tap to copy)";
+  });
+
+  // 2. Receive Messages
   peer.on('connection', conn => {
     conn.on('data', data => {
-      document.getElementById('out').value = data;
-      updateStatus("New message received! Enter password to decrypt.", "success");
+      addMessage(data, 'received');
     });
   });
 }
 
-function updateStatus(txt, cls="") {
-  const s = document.getElementById('status-text');
-  s.textContent = txt;
-  s.className = "status " + cls;
+// 3. UI Helpers
+function addMessage(text, type) {
+  const div = document.createElement('div');
+  div.className = `msg-bubble ${type}`;
+  div.textContent = text;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-// --- 4. UI HANDLERS ---
-document.getElementById('send-btn').addEventListener('click', async () => {
-  const p = document.getElementById('pwd').value;
-  const t = document.getElementById('target-id').value;
-  if(p.length < 8) return updateStatus("Password too short!", "error");
+// 4. Send Message
+document.getElementById('send-btn').addEventListener('click', () => {
+  const targetId = document.getElementById('target-id').value;
+  const msg = document.getElementById('msg-input').value;
   
-  try {
-    const payload = await encryptData(document.getElementById('msg').value, p);
-    document.getElementById('out').value = payload;
-    
-    if(t) {
-      const conn = peer.connect(t);
-      conn.on('open', () => {
-        conn.send(payload);
-        updateStatus("Sent to " + t, "success");
-      });
-    } else {
-      updateStatus("Encrypted locally (No ID provided)", "success");
-    }
-  } catch(e) { updateStatus("Encryption failed", "error"); }
+  if(!targetId || !msg) return;
+
+  const conn = peer.connect(targetId);
+  conn.on('open', () => {
+    conn.send(msg);
+    addMessage(msg, 'sent');
+    document.getElementById('msg-input').value = "";
+  });
 });
 
-document.getElementById('decrypt-btn').addEventListener('click', async () => {
-  const p = document.getElementById('pwd').value;
-  const data = document.getElementById('out').value;
-  try {
-    const pt = await decryptData(data, p);
-    document.getElementById('msg').value = pt;
-    updateStatus("Decrypted Successfully", "success");
-  } catch(e) { updateStatus("Decryption failed (Wrong password?)", "error"); }
+// Copy ID on click
+document.getElementById('my-id').addEventListener('click', () => {
+  navigator.clipboard.writeText(myId);
+  alert("ID Copied!");
 });
 
-document.getElementById('clear-btn').addEventListener('click', () => {
-  document.getElementById('msg').value = "";
-  document.getElementById('out').value = "";
-  updateStatus("Cleared.");
-});
-
-initNetworking();
+init();
 </script>
 </body>
 </html>
