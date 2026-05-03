@@ -1,1 +1,7 @@
+{
+  "directory": [
+    {"username": "admin", "vnet_id": "vnet-admin-xyz123"},
+    {"username": "udayveer", "vnet_id": "vnet-uday-a8b9c0"}
+  ]
+}
 
