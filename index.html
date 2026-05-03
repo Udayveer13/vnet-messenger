@@ -77,32 +77,47 @@ async function login() {
   status.textContent = "Connecting to Secure Network...";
   myId = "vnet-" + user;
 
-  // SECURE CONFIG: Forces SSL for GitHub Pages compatibility
-  peer = new Peer(myId, {
-    secure: true,
-    port: 443
-  });
-
-  peer.on('open', (id) => {
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('qr-img').innerHTML = "";
-    new QRCode(document.getElementById("qr-img"), { text: id, width: 200, height: 200 });
-    document.getElementById('qr-text').textContent = id;
-    renderContacts();
-  });
-
-  peer.on('error', (err) => {
-    status.textContent = "Network Error: " + err.type;
-    console.error(err);
-    if(err.type === 'unavailable-id') alert("Username is busy. Try another.");
-  });
-
-  peer.on('connection', conn => {
-    conn.on('data', data => {
-      if(!contacts[conn.peer]) { contacts[conn.peer] = conn.peer.replace('vnet-',''); saveContacts(); }
-      addMsg(contacts[conn.peer], data, 'received');
+  // Optimized Peer Config
+  try {
+    peer = new Peer(myId, {
+      debug: 3,
+      config: {'iceServers': [
+        { url: 'stun:stun.l.google.com:19302' },
+        { url: 'stun:stun1.l.google.com:19302' }
+      ]}
     });
-  });
+
+    peer.on('open', (id) => {
+      console.log('My peer ID is: ' + id);
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('qr-img').innerHTML = "";
+      new QRCode(document.getElementById("qr-img"), { text: id, width: 200, height: 200 });
+      document.getElementById('qr-text').textContent = id;
+      renderContacts();
+    });
+
+    peer.on('error', (err) => {
+      status.textContent = "Error: " + err.type;
+      console.error('PeerJS Error:', err);
+      if(err.type === 'unavailable-id') {
+        alert("This username is already online. Please try a different name.");
+        status.textContent = "ID Taken. Try again.";
+      }
+    });
+
+    peer.on('connection', conn => {
+      conn.on('data', data => {
+        if(!contacts[conn.peer]) { 
+            contacts[conn.peer] = conn.peer.replace('vnet-',''); 
+            saveContacts(); 
+        }
+        addMsg(contacts[conn.peer], data, 'received');
+      });
+    });
+
+  } catch (e) {
+    status.textContent = "System Error. Check Console.";
+  }
 }
 
 function searchUser() {
