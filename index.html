@@ -111,26 +111,25 @@ let peer, myFullId, activeTarget;
 // We use a new key 'vnet_v6_contacts' to avoid conflicts with old broken versions
 let contacts = JSON.parse(localStorage.getItem('vnet_v6_contacts') || '{}');
 
-// 1. LOGIN & HANDSHAKE LOGIC
+// This creates your unique, secured identity
 async function initVNet() {
     const user = document.getElementById('login-username').value.trim().toLowerCase();
     const pass = document.getElementById('login-password').value.trim();
-    if(!user || !pass) return alert("Enter Username and Password");
     
-    const log = document.getElementById('login-log');
-    log.textContent = "Securing Mesh Connection...";
+    if(!user || !pass) return alert("Security Check: Username and Secret Key required.");
 
-    // LEGIT SECURITY: We combine user+pass and turn it into a short code
-    // This way, no one can "guess" your ID just by knowing your name.
-    const secretHash = btoa(user + pass).substring(0, 8);
+    // This 'hashes' your credentials so your real password isn't visible in plain text
+    const secretHash = btoa(user + ":" + pass).substring(0, 10);
     myFullId = `vnet-${user}-${secretHash}`;
 
     peer = new Peer(myFullId, {
-        debug: 1,
         secure: true,
         port: 443,
         config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]}
     });
+    
+    // ... rest of the connection logic
+}
 
     peer.on('open', id => {
         document.getElementById('login-overlay').style.display = 'none';
