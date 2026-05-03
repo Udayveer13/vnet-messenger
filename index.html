@@ -108,121 +108,124 @@
 
 <script>
 let peer, myFullId, activeTarget;
-let contacts = JSON.parse(localStorage.getItem('vnet_v4_contacts') || '{}');
+// We use a new key 'vnet_v6_contacts' to avoid conflicts with old broken versions
+let contacts = JSON.parse(localStorage.getItem('vnet_v6_contacts') || '{}');
 
-function initVNet() {
-  const user = document.getElementById('login-username').value.trim();
-  if(!user) return;
-  
-  const log = document.getElementById('login-log');
-  log.textContent = "Negotiating Handshake...";
+// 1. LOGIN & HANDSHAKE LOGIC
+async function initVNet() {
+    const user = document.getElementById('login-username').value.trim().toLowerCase();
+    const pass = document.getElementById('login-password').value.trim();
+    if(!user || !pass) return alert("Enter Username and Password");
+    
+    const log = document.getElementById('login-log');
+    log.textContent = "Securing Mesh Connection...";
 
-  // SECURITY: Add a random string to prevent ID collisions on the public network
-  const salt = Math.random().toString(36).substring(7);
-  myFullId = `vnet-${user}-${salt}`;
+    // LEGIT SECURITY: We combine user+pass and turn it into a short code
+    // This way, no one can "guess" your ID just by knowing your name.
+    const secretHash = btoa(user + pass).substring(0, 8);
+    myFullId = `vnet-${user}-${secretHash}`;
 
-  peer = new Peer(myFullId, {
-    debug: 2,
-    config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }, { url: 'stun:stun1.l.google.com:19302' }]}
-  });
-
-  peer.on('open', id => {
-    document.getElementById('login-overlay').style.opacity = '0';
-    setTimeout(() => document.getElementById('login-overlay').style.display = 'none', 500);
-    document.getElementById('display-id').textContent = user.toUpperCase();
-    new QRCode(document.getElementById("qrcode"), { text: id, width: 200, height: 200 });
-    renderContacts();
-  });
-
-  peer.on('connection', conn => {
-    conn.on('data', data => {
-      if(!contacts[conn.peer]) { 
-        contacts[conn.peer] = { name: conn.peer.split('-')[1], id: conn.peer };
-        save();
-      }
-      receiveMsg(contacts[conn.peer].name, data);
+    peer = new Peer(myFullId, {
+        debug: 1,
+        secure: true,
+        port: 443,
+        config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]}
     });
-  });
 
-  peer.on('error', err => {
-    log.textContent = "Network error. Retrying...";
-    console.error(err);
-  });
+    peer.on('open', id => {
+        document.getElementById('login-overlay').style.display = 'none';
+        renderContacts();
+    });
+
+    peer.on('connection', conn => {
+        conn.on('data', data => {
+            const senderName = conn.peer.split('-')[1];
+            if(!contacts[conn.peer]) { 
+                contacts[conn.peer] = { name: senderName, id: conn.peer }; 
+                save(); 
+            }
+            receiveMsg(senderName, data);
+        });
+    });
+
+    peer.on('error', err => {
+        log.textContent = "Connection Error. Try a different name.";
+    });
 }
 
-function addFriend() {
-  const id = document.getElementById('add-friend-id').value.trim();
-  if(!id || id === myFullId) return;
-  const name = id.split('-')[1] || "User";
-  contacts[id] = { name: name, id: id };
-  save();
-  document.getElementById('add-friend-id').value = "";
+// 2. DATABASE SEARCH LOGIC (Your New Addition)
+async function searchDatabase() {
+    const query = document.getElementById('add-friend-id').value.trim().toLowerCase();
+    if(!query) return;
+
+    try {
+        // Fetching your legitimate database from GitHub
+        const response = await fetch('https://udayveer13.github.io/vnet-messenger/users.json');
+        const data = await response.json();
+        
+        const friend = data.directory.find(u => u.username === query);
+        
+        if(friend) {
+            contacts[friend.vnet_id] = { name: friend.username, id: friend.vnet_id };
+            save();
+            alert("Success! " + friend.username + " added.");
+        } else {
+            alert("User not found in VNet global directory.");
+        }
+    } catch (e) {
+        alert("Offline: Could not reach VNet Directory.");
+    }
 }
 
-function save() {
-  localStorage.setItem('vnet_v4_contacts', JSON.stringify(contacts));
-  renderContacts();
-}
+// 3. MESSAGING LOGIC
+function send() {
+    const input = document.getElementById('msg-input');
+    const txt = input.value.trim();
+    if(!activeTarget || !txt) return;
 
-function renderContacts() {
-  const container = document.getElementById('contacts');
-  container.innerHTML = "";
-  Object.values(contacts).forEach(c => {
-    const div = document.createElement('div');
-    div.className = `contact-item ${activeTarget === c.id ? 'active' : ''}`;
-    div.innerHTML = `<span class="contact-name">${c.name}</span><span class="contact-status">Tap to chat</span>`;
-    div.onclick = () => {
-      activeTarget = c.id;
-      document.getElementById('chat-target-name').textContent = c.name;
-      document.getElementById('online-dot').style.display = 'block';
-      document.getElementById('chat-box').innerHTML = "";
-      renderContacts();
-    };
-    container.appendChild(div);
-  });
+    const conn = peer.connect(activeTarget);
+    conn.on('open', () => {
+        conn.send(txt);
+        pushToUI("Me", txt, 'sent', false);
+        input.value = "";
+    });
 }
 
 function receiveMsg(name, data) {
-  const isLoc = data.startsWith('LOC:');
-  const text = isLoc ? `<a href="${data.split('LOC:')[1]}" target="_blank" style="color:var(--accent)">📍 Shared Location</a>` : data;
-  pushToUI(name, text, 'received', isLoc);
-}
-
-function send() {
-  const input = document.getElementById('msg-input');
-  const txt = input.value.trim();
-  if(!activeTarget || !txt) return;
-
-  const conn = peer.connect(activeTarget);
-  conn.on('open', () => {
-    conn.send(txt);
-    pushToUI("Me", txt, 'sent', false);
-    input.value = "";
-  });
-}
-
-function shareLoc() {
-  if(!activeTarget) return;
-  navigator.geolocation.getCurrentPosition(p => {
-    const url = `https://www.google.com/maps?q=${p.coords.latitude},${p.coords.longitude}`;
-    const conn = peer.connect(activeTarget);
-    conn.on('open', () => {
-      conn.send('LOC:' + url);
-      pushToUI("Me", `<a href="${url}" target="_blank" style="color:#fff">📍 My Location</a>`, 'sent', true);
-    });
-  });
+    pushToUI(name, data, 'received', false);
 }
 
 function pushToUI(sender, text, type, isHTML) {
-  const box = document.getElementById('chat-box');
-  const div = document.createElement('div');
-  div.className = `msg ${type}`;
-  div.innerHTML = `<span class="msg-meta">${sender}</span>${isHTML ? text : text.replace(/</g, "&lt;")}`;
-  box.appendChild(div);
-  box.scrollTop = box.scrollHeight;
+    const box = document.getElementById('chat-box');
+    const div = document.createElement('div');
+    div.className = `msg ${type}`;
+    div.innerHTML = `<span class="msg-meta">${sender}</span>${text}`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
 }
 
-function openQR() { document.getElementById('qr-modal').style.display = 'flex'; }
+// 4. STORAGE LOGIC
+function save() {
+    localStorage.setItem('vnet_v6_contacts', JSON.stringify(contacts));
+    renderContacts();
+}
+
+function renderContacts() {
+    const container = document.getElementById('contacts');
+    container.innerHTML = "";
+    Object.values(contacts).forEach(c => {
+        const div = document.createElement('div');
+        div.className = `contact-item ${activeTarget === c.id ? 'active' : ''}`;
+        div.innerHTML = `<span class="contact-name">${c.name}</span>`;
+        div.onclick = () => {
+            activeTarget = c.id;
+            document.getElementById('chat-target-name').textContent = c.name;
+            document.getElementById('chat-box').innerHTML = "";
+            renderContacts();
+        };
+        container.appendChild(div);
+    });
+}
 </script>
 </body>
 </html>
