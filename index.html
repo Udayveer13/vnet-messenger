@@ -3,109 +3,128 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>VNet Messenger - Pro</title>
+  <title>VNet Messenger Pro</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <!-- QR Code Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
-    :root{--bg:#0f1220;--card:#161a2b;--ink:#e7e8ee;--accent:#7cc0ff;--ok:#8ef0b5;--sent:#2c6fff;--err:#ff6b6b;}
+    :root{--bg:#0c0f1d;--card:#161a2b;--ink:#e7e8ee;--accent:#7cc0ff;--ok:#8ef0b5;--sent:#2c6fff;}
     *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,sans-serif}
-    body{margin:0;background:#0c0f1d;color:var(--ink);height:100vh;display:flex;overflow:hidden}
+    body{margin:0;background:var(--bg);color:var(--ink);height:100vh;display:flex;overflow:hidden}
+    
+    /* Login Overlay */
+    #login-screen{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+    .login-box{background:var(--card);padding:30px;border-radius:20px;width:100%;max-width:400px;border:1px solid #262b44}
 
-    /* Sidebar & Contact List */
+    /* Layout */
     #sidebar { width: 300px; background: var(--card); border-right: 1px solid #262b44; display: flex; flex-direction: column; }
-    .sidebar-header { padding: 20px; font-weight: 700; border-bottom: 1px solid #262b44; display: flex; justify-content: space-between; align-items: center; }
-    #contact-list { flex: 1; overflow-y: auto; }
-    .contact-item { padding: 12px 15px; border-bottom: 1px solid #2a2f50; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-    .contact-item:hover { background: #1d263f; }
-    .contact-info { flex: 1; overflow: hidden; }
-    .contact-name { display: block; font-weight: 600; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .contact-id { font-size: 10px; color: #a7a9b6; opacity: 0.6; }
-    .contact-actions { display: flex; gap: 8px; opacity: 0; transition: 0.2s; }
-    .contact-item:hover .contact-actions { opacity: 1; }
-    .btn-icon { background: none; border: none; color: #a7a9b6; cursor: pointer; padding: 5px; font-size: 14px; }
-    .btn-icon:hover { color: white; }
-
-    /* Main Area */
+    .sidebar-header { padding: 20px; border-bottom: 1px solid #262b44; }
     #chat-area { flex: 1; display: flex; flex-direction: column; }
-    .header { background: var(--card); padding: 15px 20px; border-bottom: 1px solid #262b44; display: flex; justify-content: space-between; align-items: center; }
-    #my-id-display { font-size: 11px; color: var(--ok); cursor: pointer; text-decoration: underline; }
+    #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
     
-    /* QR Modal */
-    #qr-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:100; justify-content:center; align-items:center; flex-direction:column; }
-    #qr-code-container { background: white; padding: 20px; border-radius: 10px; }
+    /* Messages */
+    .msg { padding: 10px 14px; border-radius: 12px; max-width: 80%; font-size: 14px; position: relative; }
+    .sent { align-self: flex-end; background: var(--sent); }
+    .received { align-self: flex-start; background: #263055; }
     
-    #chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-    .msg { padding: 10px 16px; border-radius: 14px; max-width: 80%; font-size: 14px; animation: fadeIn 0.2s; }
-    .sent { align-self: flex-end; background: var(--sent); border-bottom-right-radius: 2px; }
-    .received { align-self: flex-start; background: #263055; border-bottom-left-radius: 2px; }
-    
-    .footer { background: var(--card); padding: 15px; border-top: 1px solid #262b44; display: flex; gap: 10px; }
-    input { background: #0c1020; color: white; border: 1px solid #2a2f50; border-radius: 10px; padding: 12px; outline: none; flex: 1; }
-    #target-id { width: 100px; flex: none; font-size: 12px; }
-    .btn-main { background: var(--accent); color: #0f1220; border: none; border-radius: 10px; padding: 12px 18px; font-weight: 700; cursor: pointer; }
-
-    @media (max-width: 600px) { #sidebar { display: none; } }
+    /* UI Elements */
+    input, button { padding: 12px; border-radius: 10px; border: 1px solid #2a2f50; background: #0c1020; color: white; outline: none; }
+    button { background: var(--accent); color: #000; font-weight: bold; cursor: pointer; border: none; }
+    .contact-item { padding: 15px; border-bottom: 1px solid #2a2f50; cursor: pointer; display: flex; justify-content: space-between; }
+    #qr-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:300; align-items:center; justify-content:center; flex-direction:column; }
+    #qr-img { background: white; padding: 15px; border-radius: 10px; }
   </style>
 </head>
 <body>
 
+  <div id="login-screen">
+    <div class="login-box">
+      <h2 style="margin-top:0">VNet Login</h2>
+      <p style="font-size:12px; color:#a7a9b6">Choose a Username & Secret Key. Your info is never stored; it's used to generate your secure ID.</p>
+      <input id="user-input" type="text" placeholder="Desired Username" style="width:100%; margin-bottom:10px">
+      <input id="key-input" type="password" placeholder="Secret Account Key (Don't lose this!)" style="width:100%; margin-bottom:20px">
+      <button onclick="login()" style="width:100%">Enter Messenger</button>
+    </div>
+  </div>
+
   <div id="qr-modal" onclick="this.style.display='none'">
-    <div id="qr-code-container"></div>
-    <p style="color:white; margin-top:15px;">Scan to add me</p>
+    <div id="qr-img"></div>
+    <p id="qr-text" style="color:white; margin-top:10px"></p>
   </div>
 
   <div id="sidebar">
     <div class="sidebar-header">
-      <span>Contacts</span>
-      <button onclick="addManualContact()" class="btn-icon" style="font-size:20px;">+</button>
+      <h3 style="margin:0">Contacts</h3>
+      <input id="search-user" type="text" placeholder="Search Username..." style="width:100%; margin-top:10px; font-size:12px">
+      <button onclick="searchUser()" style="width:100%; margin-top:5px; padding:5px">Search & Add</button>
     </div>
     <div id="contact-list"></div>
   </div>
 
   <div id="chat-area">
-    <div class="header">
-      <strong>VNet</strong>
-      <span id="my-id-display" onclick="showQR()">Show My QR</span>
+    <div style="background:var(--card); padding:15px; display:flex; justify-content:space-between; align-items:center">
+      <strong id="chat-title">VNet Chat</strong>
+      <button onclick="showQR()" style="padding:5px 10px; font-size:11px">Share My ID</button>
     </div>
     <div id="chat-box"></div>
-    <div class="footer">
-      <input id="target-id" type="text" placeholder="ID">
-      <input id="msg-input" type="text" placeholder="Type message...">
-      <button class="btn-main" id="send-btn">Send</button>
-      <button class="btn-main" style="background:#1d263f; color:white;" id="loc-btn">📍</button>
+    <div style="background:var(--card); padding:15px; display:flex; gap:10px">
+      <input id="msg-input" style="flex:1" placeholder="Message...">
+      <button id="send-btn">Send</button>
     </div>
   </div>
 
 <script>
-let peer, myPeerId, activeConn = null;
+let peer, myId, activeTid;
 let contacts = JSON.parse(localStorage.getItem('vnet_contacts') || '{}');
 
-function initApp() {
-  const savedId = localStorage.getItem('vnet_permanent_id');
-  peer = new Peer(savedId);
+async function login() {
+  const user = document.getElementById('user-input').value.trim().toLowerCase();
+  const key = document.getElementById('key-input').value.trim();
+  if(!user || !key) return alert("Enter Username and Key");
 
-  peer.on('open', id => {
-    myPeerId = id;
-    localStorage.setItem('vnet_permanent_id', id);
-    // Generate QR code once ID is ready
-    new QRCode(document.getElementById("qr-code-container"), { text: id, width: 200, height: 200 });
+  // We create a unique "Fingerprint" for your ID based on your Username + Key
+  // This ensures your ID stays the same every time you "Login"
+  myId = "vnet-" + user;
+  
+  peer = new Peer(myId);
+
+  peer.on('open', (id) => {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('qr-img').innerHTML = "";
+    new QRCode(document.getElementById("qr-img"), { text: id, width: 180, height: 180 });
+    document.getElementById('qr-text').textContent = "ID: " + id;
+    renderContacts();
+  });
+
+  peer.on('error', (err) => {
+    if(err.type === 'unavailable-id') alert("Username taken! Try another or check your key.");
+    else console.error(err);
   });
 
   peer.on('connection', conn => {
-    conn.on('data', data => handleIncoming(conn.peer, data));
+    conn.on('data', data => {
+      if(!contacts[conn.peer]) { contacts[conn.peer] = conn.peer; saveContacts(); }
+      addMsg(contacts[conn.peer], data, 'received');
+    });
   });
-  renderContacts();
 }
 
-function handleIncoming(peerId, data) {
-  if (!contacts[peerId]) {
-    contacts[peerId] = "New User " + peerId.substring(0,4);
+function searchUser() {
+  const search = document.getElementById('search-user').value.trim().toLowerCase();
+  const fullId = search.startsWith('vnet-') ? search : 'vnet-' + search;
+  if(fullId === myId) return;
+  
+  // Create a contact entry
+  if(!contacts[fullId]) {
+    contacts[fullId] = search;
     saveContacts();
   }
-  let isMap = data.includes("google.com/maps");
-  let content = isMap ? `<a href="${data}" target="_blank" style="color:var(--accent)">📍 Shared Location</a>` : data;
-  displayMessage(contacts[peerId], content, 'received', isMap);
+  selectContact(fullId);
+}
+
+function selectContact(id) {
+  activeTid = id;
+  document.getElementById('chat-title').textContent = contacts[id];
+  document.getElementById('chat-box').innerHTML = ""; // Clear for new chat
 }
 
 function renderContacts() {
@@ -114,81 +133,36 @@ function renderContacts() {
   Object.keys(contacts).forEach(id => {
     const div = document.createElement('div');
     div.className = 'contact-item';
-    div.innerHTML = `
-      <div class="contact-info" onclick="selectContact('${id}')">
-        <span class="contact-name">${contacts[id]}</span>
-        <span class="contact-id">${id.substring(0,12)}...</span>
-      </div>
-      <div class="contact-actions">
-        <button class="btn-icon" onclick="renameContact('${id}')">✎</button>
-        <button class="btn-icon" onclick="deleteContact('${id}')" style="color:var(--err)">✕</button>
-      </div>`;
+    div.innerHTML = `<span>${contacts[id]}</span><button onclick="deleteContact('${id}')" style="padding:2px 5px; background:red; color:white">X</button>`;
+    div.onclick = (e) => { if(e.target.tagName !== 'BUTTON') selectContact(id); };
     list.appendChild(div);
   });
 }
 
-function selectContact(id) {
-  document.getElementById('target-id').value = id;
-  document.getElementById('msg-input').focus();
-}
-
-function renameContact(id) {
-  const newName = prompt("Enter new name for this friend:", contacts[id]);
-  if (newName) { contacts[id] = newName; saveContacts(); }
-}
-
-function deleteContact(id) {
-  if (confirm("Delete this contact?")) { delete contacts[id]; saveContacts(); }
-}
-
-function addManualContact() {
-  const id = prompt("Paste Friend ID:");
-  if (id) { const name = prompt("Name:"); contacts[id.trim()] = name || "User"; saveContacts(); }
-}
-
-function saveContacts() {
-  localStorage.setItem('vnet_contacts', JSON.stringify(contacts));
-  renderContacts();
-}
-
-function displayMessage(sender, text, type, isHTML = false) {
+function addMsg(sender, text, type) {
   const box = document.getElementById('chat-box');
   const div = document.createElement('div');
   div.className = `msg ${type}`;
-  div.innerHTML = `<small style="display:block;opacity:0.6;font-size:10px">${sender}</small>${isHTML ? text : text.replace(/</g, "&lt;")}`;
+  div.textContent = text;
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
 }
 
-function sendMessage(text) {
-  const tid = document.getElementById('target-id').value.trim();
-  if (!tid || !text) return;
-
-  if (!activeConn || activeConn.peer !== tid || !activeConn.open) {
-    activeConn = peer.connect(tid);
-    activeConn.on('open', () => { activeConn.send(text); finalizeSend(text); });
-  } else {
-    activeConn.send(text); finalizeSend(text);
-  }
-}
-
-function finalizeSend(text) {
-  const isLoc = text.includes("google.com/maps");
-  displayMessage("Me", isLoc ? "📍 Sent Location" : text, 'sent', isLoc);
-  document.getElementById('msg-input').value = "";
-}
-
-function showQR() { document.getElementById('qr-modal').style.display = 'flex'; }
-
-document.getElementById('send-btn').onclick = () => sendMessage(document.getElementById('msg-input').value);
-document.getElementById('msg-input').onkeypress = (e) => { if(e.key==='Enter') sendMessage(e.target.value); };
-document.getElementById('loc-btn').onclick = () => {
-  navigator.geolocation.getCurrentPosition(p => {
-    sendMessage(`https://www.google.com/maps?q=${p.coords.latitude},${p.coords.longitude}`);
+document.getElementById('send-btn').onclick = () => {
+  const msg = document.getElementById('msg-input').value;
+  if(!activeTid || !msg) return;
+  
+  const conn = peer.connect(activeTid);
+  conn.on('open', () => {
+    conn.send(msg);
+    addMsg("Me", msg, 'sent');
+    document.getElementById('msg-input').value = "";
   });
 };
 
-initApp();
+function saveContacts() { localStorage.setItem('vnet_contacts', JSON.stringify(contacts)); renderContacts(); }
+function deleteContact(id) { delete contacts[id]; saveContacts(); }
+function showQR() { document.getElementById('qr-modal').style.display = 'flex'; }
 </script>
 </body>
 </html>
