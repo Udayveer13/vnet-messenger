@@ -1,14 +1,35 @@
 import os
 from kivy.app import App
-from kivy.uix.webbrowser import WebView
-from kivy.core.window import Window
+from kivy.uix.modalview import ModalView
+from android.runnable import run_on_ui_thread
+
+# This bridges Python to the Android System WebView
+from jnius import autoclass
+
+WebView = autoclass('android.webkit.WebView')
+WebViewClient = autoclass('android.webkit.WebViewClient')
+PythonActivity = autoclass('org.kivy.android.PythonActivity')
 
 class VNetApp(App):
     def build(self):
-        # This tells Android to find your index.html in the same folder
-        path = os.path.abspath("index.html")
-        # Initialize the webview and point it to your file
-        return WebView(url=f"file://{path}", enable_javascript=True, enable_hw_accel=True)
+        # We start the WebView on the Android UI thread
+        self.create_webview()
+        # Return an empty view while the webview loads over it
+        return ModalView()
+
+    @run_on_ui_thread
+    def create_webview(self):
+        activity = PythonActivity.mActivity
+        webview = WebView(activity)
+        webview.getSettings().setJavaScriptEnabled(True)
+        webview.getSettings().setDomStorageEnabled(True) # Required for contact storage
+        webview.getSettings().setAllowFileAccess(True)
+        webview.setWebViewClient(WebViewClient())
+        
+        # Point to your index.html inside the app package
+        path = os.path.join(os.getcwd(), "index.html")
+        webview.loadUrl(f"file://{path}")
+        activity.setContentView(webview)
 
 if __name__ == "__main__":
     VNetApp().run()
