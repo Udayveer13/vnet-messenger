@@ -1,31 +1,12 @@
-name: Build VNet APK
-on: [push, workflow_dispatch]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf automake libtool pkg-config libltdl-dev libffi-dev build-essential
-          pip install --upgrade buildozer
+          sudo apt-get install -y autoconf automake libtool pkg-config libltdl-dev libffi-dev build-essential python3-dev
+          pip install --upgrade pip
+          pip install --user --upgrade buildozer cython==0.29.33 virtualenv
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Build with Buildozer
-        run: yes | buildozer -v android debug
-        
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: VNet-Messenger-APK
-          path: bin/*.apk
-          
-      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y autoconf automake libtool pkg-config libltdl-dev libffi-dev build-essential
-          pip install --upgrade pip
-          pip install --upgrade buildozer cython==0.29.33 virtualenv  # Added Cython and virtualenv
-          
+          export PATH=$PATH:$HOME/.local/bin
+          yes | buildozer -v android debug
