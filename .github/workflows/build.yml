@@ -3,26 +3,50 @@ on: [push, workflow_dispatch]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # Matches your buildozer.spec
 
       - name: Free Disk Space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+      - name: Install System Dependencies
+        run: |
+          sudo sed -i 's/azure.archive.ubuntu.com/archive.ubuntu.com/g' /etc/apt/sources.list
+          sudo apt-get update
+          sudo apt-get install -y -f
+          sudo apt-get install -y \
+            build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev \
+            libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev \
+            libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good libffi-dev \
+            libssl-dev autoconf automake libtool pkg-config cmake unzip zip \
+            openjdk-17-jdk libunwind-dev
+
+      - name: Install Buildozer & Cython
+        run: |
+          pip install --upgrade pip
+          pip install --user "buildozer>=1.5.0" "cython<3.0.0" virtualenv setuptools
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Build with Buildozer
-        # This is the correct repo name
-        uses: ArtemSBulgakov/buildozer-action@v1
-        id: buildozer
-        with:
-          command: buildozer android debug
-          buildozer_version: stable
+        run: |
+          export PATH=$PATH:$HOME/.local/bin
+          export _JAVA_OPTIONS="-Xmx4g"
+          # 'yes |' handles all Android license prompts automatically
+          yes | buildozer -v android debug
         env:
-          # Higher memory for the VNet encryption compilation
-          _JAVA_OPTIONS: "-Xmx4g"
+          APP_ANDROID_ACCEPT_SDK_LICENSE: "1"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
