@@ -20,9 +20,11 @@ jobs:
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
-      - name: Install System Dependencies
+      - name: Fix Apt Sources & Install Dependencies
         run: |
-          sudo apt-get update
+          sudo sed -i 's/azure.archive.ubuntu.com/archive.ubuntu.com/g' /etc/apt/sources.list
+          sudo apt-get update --fix-missing
+          sudo apt-get install -y -f
           sudo apt-get install -y \
             build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev \
             libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev \
@@ -40,8 +42,7 @@ jobs:
       - name: Build with Buildozer
         run: |
           export PATH=$PATH:$HOME/.local/bin
-          # This line increases the memory limit for the Java process (Fixes the crash)
-          export _JAVA_OPTIONS="-Xmx4g" 
+          export _JAVA_OPTIONS="-Xmx4g"
           yes | buildozer -v android debug
         env:
           APP_ANDROID_ACCEPT_SDK_LICENSE: "1"
@@ -52,3 +53,4 @@ jobs:
         with:
           name: VNet-Messenger-APK
           path: bin/*.apk
+          
