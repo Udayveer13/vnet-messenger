@@ -22,11 +22,11 @@ class VNetApp(App):
         activity = PythonActivity.mActivity
         webview = WebView(activity)
         webview.getSettings().setJavaScriptEnabled(True)
-        webview.getSettings().setDomStorageEnabled(True) # Required for contact storage
+        webview.getSettings().setDomStorageEnabled(True) # Vital for contact saving
         webview.getSettings().setAllowFileAccess(True)
         webview.setWebViewClient(WebViewClient())
         
-        # Point to your index.html inside the app package
+        # Absolute path to your local HTML file
         path = os.path.join(os.getcwd(), "index.html")
         webview.loadUrl(f"file://{path}")
         activity.setContentView(webview)
