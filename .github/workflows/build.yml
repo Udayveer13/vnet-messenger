@@ -13,36 +13,38 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Maximize Build Space
+      - name: Free Disk Space
         run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
-      - name: Fix Apt Sources & Install Dependencies
+      - name: Install Dependencies
         run: |
+          # Use main mirrors to ensure all dependencies are found
           sudo sed -i 's/azure.archive.ubuntu.com/archive.ubuntu.com/g' /etc/apt/sources.list
-          sudo apt-get update --fix-missing
+          sudo apt-get update
+          # Force fix broken dependencies
           sudo apt-get install -y -f
           sudo apt-get install -y \
             build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev \
             libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev \
-            libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0 \
+            libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good libffi-dev \
             libssl-dev autoconf automake libtool pkg-config cmake unzip zip \
-            openjdk-17-jdk
+            openjdk-17-jdk libunwind-dev
 
       - name: Install Buildozer & Cython
         run: |
           pip install --upgrade pip
-          pip install --user --upgrade "buildozer>=1.5.0" "cython<3.0.0" virtualenv
+          pip install --user "buildozer>=1.5.0" "cython<3.0.0" virtualenv setuptools
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Build with Buildozer
         run: |
           export PATH=$PATH:$HOME/.local/bin
           export _JAVA_OPTIONS="-Xmx4g"
+          # This will now proceed since the system dependencies are fixed
           yes | buildozer -v android debug
         env:
           APP_ANDROID_ACCEPT_SDK_LICENSE: "1"
