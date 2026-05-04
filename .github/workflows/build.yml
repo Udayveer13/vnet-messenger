@@ -8,18 +8,24 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Build with Buildozer Action
-        uses: kivy/buildozer-action@v1
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+
+      - name: Build with Buildozer
+        # This is the correct repo name
+        uses: ArtemSBulgakov/buildozer-action@v1
+        id: buildozer
         with:
-          python_version: 3.11
+          command: buildozer android debug
           buildozer_version: stable
         env:
-          # This helps avoid the memory crashes we saw earlier
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
+          # Higher memory for the VNet encryption compilation
+          _JAVA_OPTIONS: "-Xmx4g"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: VNet-Messenger
+          name: VNet-Messenger-APK
           path: bin/*.apk
-          
