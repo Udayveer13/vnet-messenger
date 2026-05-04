@@ -13,12 +13,16 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Fix Apt Sources & Install Dependencies
+      - name: Maximize Build Space
         run: |
-          # This specifically fixes Error 100 by switching to a more reliable mirror
-          sudo sed -i 's/azure.archive.ubuntu.com/archive.ubuntu.com/g' /etc/apt/sources.list
-          sudo apt-get update --fix-missing
-          sudo apt-get install -y -f
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
           sudo apt-get install -y \
             build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev \
             libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev \
@@ -36,13 +40,15 @@ jobs:
       - name: Build with Buildozer
         run: |
           export PATH=$PATH:$HOME/.local/bin
+          # This line increases the memory limit for the Java process (Fixes the crash)
+          export _JAVA_OPTIONS="-Xmx4g" 
           yes | buildozer -v android debug
         env:
           APP_ANDROID_ACCEPT_SDK_LICENSE: "1"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: VNet-Messenger-APK
           path: bin/*.apk
-          
