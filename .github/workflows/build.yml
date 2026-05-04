@@ -11,7 +11,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Matches your buildozer.spec
+          python-version: '3.11'
 
       - name: Free Disk Space
         run: |
@@ -42,7 +42,7 @@ jobs:
         run: |
           export PATH=$PATH:$HOME/.local/bin
           export _JAVA_OPTIONS="-Xmx4g"
-          # 'yes |' handles all Android license prompts automatically
+          # 'yes |' handles the Android SDK licenses
           yes | buildozer -v android debug
         env:
           APP_ANDROID_ACCEPT_SDK_LICENSE: "1"
@@ -53,3 +53,4 @@ jobs:
         with:
           name: VNet-Messenger-APK
           path: bin/*.apk
+          
