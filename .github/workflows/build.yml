@@ -13,15 +13,13 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Free Disk Space & Deep Clean
+      - name: Free Disk Space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          # This removes old, failed build attempts to prevent 'Exit Code 1'
-          rm -rf .buildozer/
 
-      - name: Install Dependencies
+      - name: Install System Dependencies
         run: |
           sudo sed -i 's/azure.archive.ubuntu.com/archive.ubuntu.com/g' /etc/apt/sources.list
           sudo apt-get update
@@ -40,12 +38,17 @@ jobs:
           pip install --user "buildozer>=1.5.0" "cython<3.0.0" virtualenv setuptools
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
+      - name: Manual Platform Injection
+        # This step fixes the FileNotFoundError by pre-cloning the missing engine
+        run: |
+          mkdir -p .buildozer/android/platform
+          git clone --depth 1 https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android
+
       - name: Build with Buildozer
         run: |
           export PATH=$PATH:$HOME/.local/bin
           export _JAVA_OPTIONS="-Xmx4g"
-          # Added 'clean' before 'debug' to ensure a fresh start
-          buildozer android clean
+          # We skip 'clean' here because we just manually created the platform folder
           yes | buildozer -v android debug
         env:
           APP_ANDROID_ACCEPT_SDK_LICENSE: "1"
@@ -56,4 +59,3 @@ jobs:
         with:
           name: VNet-Messenger-APK
           path: bin/*.apk
-          
