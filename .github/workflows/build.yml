@@ -13,18 +13,18 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Free Disk Space
+      - name: Free Disk Space & Deep Clean
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          # This removes old, failed build attempts to prevent 'Exit Code 1'
+          rm -rf .buildozer/
 
       - name: Install Dependencies
         run: |
-          # Use main mirrors to ensure all dependencies are found
           sudo sed -i 's/azure.archive.ubuntu.com/archive.ubuntu.com/g' /etc/apt/sources.list
           sudo apt-get update
-          # Force fix broken dependencies
           sudo apt-get install -y -f
           sudo apt-get install -y \
             build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev \
@@ -44,7 +44,8 @@ jobs:
         run: |
           export PATH=$PATH:$HOME/.local/bin
           export _JAVA_OPTIONS="-Xmx4g"
-          # This will now proceed since the system dependencies are fixed
+          # Added 'clean' before 'debug' to ensure a fresh start
+          buildozer android clean
           yes | buildozer -v android debug
         env:
           APP_ANDROID_ACCEPT_SDK_LICENSE: "1"
