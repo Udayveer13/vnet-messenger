@@ -11,18 +11,20 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Switched to 3.11 for maximum stability with Kivy
+          python-version: '3.11'
 
       - name: Install System Dependencies
+        # Added 'retries' and 'fix-missing' to solve Error 100
         run: |
-          sudo apt-get update
+          sudo apt-get update --fix-missing
+          sudo apt-get install -y -f
           sudo apt-get install -y \
             build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev \
             libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev \
             libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0 \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good libffi-dev \
             libssl-dev autoconf automake libtool pkg-config cmake unzip zip \
-            openjdk-17-jdk
+            openjdk-17-jdk --fix-missing
 
       - name: Install Buildozer & Cython
         run: |
@@ -33,10 +35,8 @@ jobs:
       - name: Build with Buildozer
         run: |
           export PATH=$PATH:$HOME/.local/bin
-          # This command ensures all Android SDK components are present before starting
           yes | buildozer -v android debug
         env:
-          # This prevents the build from hanging on certain prompts
           APP_ANDROID_ACCEPT_SDK_LICENSE: "1"
 
       - name: Upload APK Artifact
@@ -44,4 +44,3 @@ jobs:
         with:
           name: VNet-Messenger-APK
           path: bin/*.apk
-          
